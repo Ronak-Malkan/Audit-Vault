@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package blockchain;
+
+import "common.proto";
+
+message WhisperResponse {
+  string status = 1; // success, failure
+  string error  = 2; // error message if failure
+}
+
+message Block {
+  string       block_hash          = 1;
+  string       previous_block_hash = 2;
+  string       merkle_root         = 3;
+  int32        block_number        = 4;
+  int64        timestamp           = 5;
+  string       proposer_id         = 6;
+  repeated common.FileAudit audits = 7;
+}
+
+message BlockProposal {
+  Block  block       = 1;
+  string proposer_id = 2;
+  int64  timestamp   = 3;
+}
+
+message Vote {
+  string block_id      = 1;
+  string validator_id  = 2;
+  bool   approve       = 3;
+  string signature     = 4;
+  int64  timestamp     = 5;   
+}
+
+message BlockVoteResponse {
+  bool   success = 1;    // Success or Failure
+  string message = 2;    // Error message
+}
+
+service BlockChainService {
+  rpc WhisperAuditRequest(common.FileAudit) returns (WhisperResponse);
+  rpc ProposeBlock(BlockProposal)        returns (BlockVoteResponse);
+  rpc VoteOnBlock(Vote)                  returns (BlockVoteResponse);
+  // rpc FinalizeBlock();  // future
+}

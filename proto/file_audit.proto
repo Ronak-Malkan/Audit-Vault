@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+import "common.proto";
+
+package common;
+
+message BlockHeader {
+  string     block_hash         = 1;
+  uint64     block_number       = 2;
+  int64      timestamp          = 3;
+  string     previous_block_hash = 4;
+  string     merkle_root        = 5;
+  repeated string merkle_proof   = 6;
+  repeated string audit_hashes   = 7;  // optional for debugging/verif.
+}
+
+message FileAuditResponse {
+  string      req_id               = 1;  // incase of async
+  string      blockchain_tx_hash   = 2;
+  BlockHeader block_header         = 3;
+  string      status               = 4;  // success, failure
+  string      error_message        = 5;  // If failure
+}
+
+service FileAuditService {
+  rpc SubmitAudit(common.FileAudit) returns (FileAuditResponse);
+}

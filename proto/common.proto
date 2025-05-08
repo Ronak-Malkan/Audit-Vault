@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package common;
+
+enum AccessType {
+  UNKNOWN = 0;
+  READ    = 1;
+  WRITE   = 2;
+  UPDATE  = 3;
+  DELETE  = 4;
+}
+
+message FileInfo {
+  string file_id   = 1;  // e.g. inode on Linux/Mac
+  string file_name = 2;
+}
+
+message UserInfo {
+  string user_id   = 1;  // e.g. id --user on Linux
+  string user_name = 2;
+}
+
+message FileAudit {
+  string    req_id     = 1;  // incase of async
+  FileInfo  file_info  = 2;
+  UserInfo  user_info  = 3;
+  AccessType access_type = 4;
+  int64     timestamp  = 5;
+  string    signature  = 6;  // To verify the signature
+  string    public_key = 7;  // To verify the signature
+}
