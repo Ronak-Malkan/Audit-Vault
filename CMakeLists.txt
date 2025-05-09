@@ -8,6 +8,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Threads for std::thread
 find_package(Threads REQUIRED)
 
+find_package(OpenSSL REQUIRED)
+include_directories(${OPENSSL_INCLUDE_DIR})
+link_libraries(${OPENSSL_LIBRARIES})
+
 # pkg-config for gRPC and Protobuf
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GRPC    REQUIRED grpc++)
@@ -40,6 +44,7 @@ file(GLOB SERVER_SRCS
   "${CMAKE_CURRENT_SOURCE_DIR}/src/server.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/config_loader.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/mempool_manager.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/merkle_tree.cpp"
 )
 
 # Collect client sources

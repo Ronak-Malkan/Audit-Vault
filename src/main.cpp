@@ -13,6 +13,17 @@ int main(int argc, char** argv) {
   // Shared mempool manager
   auto mempool = std::make_shared<MempoolManager>("../mempool.dat");
 
+  // 2a) Reload existing audits and report
+    auto pending = mempool->LoadAll();
+    std::cout << "Recovered " << pending.size() 
+            << " audits from mempool:\n";
+    for (auto& a : pending) {
+    std::cout << "  • req_id=" << a.req_id()
+                << ", file_id=" << a.file_info().file_id()
+                << "\n";
+    }
+
+
   // Services
   FileAuditServiceImpl  file_svc(peers,   mempool);
   BlockChainServiceImpl block_svc(mempool);

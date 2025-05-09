@@ -26,7 +26,7 @@ private:
   std::shared_ptr<MempoolManager> mempool_;
 };
 
-/// Handles incoming gossip from peers.
+/// Handles incoming gossip & block proposals.
 class BlockChainServiceImpl final
     : public blockchain::BlockChainService::Service {
 public:
@@ -49,4 +49,5 @@ public:
 
 private:
   std::shared_ptr<MempoolManager> mempool_;
+  std::string                     last_block_hash_;  // head of the chain
 };
