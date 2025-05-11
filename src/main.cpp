@@ -29,7 +29,7 @@ int main(int argc, char** argv) {
   BlockChainServiceImpl block_svc(mempool);
 
   // Server
-  std::string addr = "127.0.0.1:50051";
+  std::string addr = "0.0.0.0:50051";
   if (argc > 1) {
     addr = argv[1];
   }

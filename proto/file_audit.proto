@@ -1,27 +1,31 @@
 syntax = "proto3";
 
+package fileaudit;
+
+option go_package = "github.com/sameersah/auditchain/proto_gen/file_audit";
+option java_package = "com.codecatalyst.auditchain.proto.fileaudit";
+option java_outer_classname = "FileAuditProto";
+
 import "common.proto";
 
-package common;
-
-message BlockHeader {
-  string     block_hash         = 1;
-  uint64     block_number       = 2;
-  int64      timestamp          = 3;
-  string     previous_block_hash = 4;
-  string     merkle_root        = 5;
-  repeated string merkle_proof   = 6;
-  repeated string audit_hashes   = 7;  // optional for debugging/verif.
+message FileAuditResponse {
+  string req_id = 1;
+  string blockchain_tx_hash = 2;
+  BlockHeader block_header = 3;
+  string status = 4;          // "success" or "failure"
+  string error_message = 5;   // Optional error message
 }
 
-message FileAuditResponse {
-  string      req_id               = 1;  // incase of async
-  string      blockchain_tx_hash   = 2;
-  BlockHeader block_header         = 3;
-  string      status               = 4;  // success, failure
-  string      error_message        = 5;  // If failure
+message BlockHeader {
+  string block_hash = 1;
+  uint64 block_number = 2;
+  int64 timestamp = 3;
+  string previous_block_hash = 4;
+  string merkle_root = 5;
+  repeated string merkle_proof = 6;
+  repeated string audit_hashes = 7;  // Optional for debug
 }
 
 service FileAuditService {
-  rpc SubmitAudit(common.FileAudit) returns (FileAuditResponse);
+  rpc SubmitAudit (common.FileAudit) returns (FileAuditResponse);
 }
