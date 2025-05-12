@@ -10,40 +10,54 @@ import "common.proto";
 
 message WhisperResponse {
   string status = 1;         // "success", "failure"
-  string error = 2;
+  string error_message = 2;
 }
 
 message Block {
-  string block_hash = 1;
-  string previous_block_hash = 2;
-  string merkle_root = 3;
-  int32 block_number = 4;
-  int64 timestamp = 5;
-  string proposer_id = 6;
-  repeated common.FileAudit audits = 7;
-}
-
-message BlockProposal {
-  Block block = 1;
-  string proposer_id = 2;
-  int64 timestamp = 3;
-}
-
-message Vote {
-  string block_id = 1;
-  string validator_id = 2;
-  bool approve = 3;
-  string signature = 4;
-  int64 timestamp = 5;
+  int64 id = 1;                           // block id
+  string hash = 2;                        // hash of current block
+  string previous_hash = 3;               // hash of previous block
+  repeated common.FileAudit audits = 4;   // audits in mempool
+  string merkle_root = 5;
 }
 
 message BlockVoteResponse {
-  bool success = 1;
-  string message = 2;
+  bool vote = 1;             // true/false: whether your server votes for the proposed block
+  string status = 2;         // "success", "failure"
+  string error_message = 3;
+}
+
+message BlockCommitResponse {
+  string status = 2;         // "success", "failure"
+  string error_message = 3;
+}
+
+message GetBlockRequest {
+  int64 id = 1;
+} 
+
+message GetBlockResponse {
+  Block block = 1;
+  string status = 2;
+  string error_message = 3;  
+}
+
+message HeartbeatRequest {
+  string from_address = 1;
+  string current_leader_address = 2;
+  int64 latest_block_id = 3;
+  int64 mem_pool_size = 4;
+}
+
+message HeartbeatResponse {
+  string status = 1;   // "success", "failure"  
+  string error_message = 2;  
 }
 
 service BlockChainService {
   rpc WhisperAuditRequest (common.FileAudit) returns (WhisperResponse);
-  rpc ProposeBlock (BlockProposal) returns (BlockVoteResponse);
-  rpc VoteOnBlock (Vote) returns (BlockVoteResponse);
+  rpc ProposeBlock (Block) returns (BlockVoteResponse);
+  rpc CommitBlock (Block) returns (BlockCommitResponse);
+  rpc GetBlock (GetBlockRequest) returns (GetBlockResponse);
+  rpc SendHeartbeat (HeartbeatRequest) returns (HeartbeatResponse);
 }

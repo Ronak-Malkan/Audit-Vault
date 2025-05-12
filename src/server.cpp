@@ -78,6 +78,12 @@ FileAuditServiceImpl::FileAuditServiceImpl(
   }
 }
 
+std::vector<std::unique_ptr<blockchain::BlockChainService::Stub>>&
+FileAuditServiceImpl::getGossipStubs() {
+  return gossip_stubs_;
+}
+
+
 grpc::Status FileAuditServiceImpl::SubmitAudit(
     grpc::ServerContext* /*ctx*/,
     const common::FileAudit* request,
@@ -136,13 +142,12 @@ grpc::Status FileAuditServiceImpl::SubmitAudit(
 
 // -- BlockChainServiceImpl ------------------------------------------------
 
-static bool VerifyClientSignatureStub(const common::FileAudit&) { return true; }
-static bool VerifyProposerSignatureStub(const blockchain::BlockProposal&) { return true; }
 
 BlockChainServiceImpl::BlockChainServiceImpl(
-    std::shared_ptr<MempoolManager> mempool)
+    std::shared_ptr<MempoolManager> mempool,
+    ChainManager& chain)
   : mempool_(std::move(mempool))
-  , last_block_hash_("")  // no blocks yet
+  , chain_(chain)
 {}
 
 grpc::Status BlockChainServiceImpl::WhisperAuditRequest(
@@ -200,21 +205,121 @@ grpc::Status BlockChainServiceImpl::WhisperAuditRequest(
 
 grpc::Status BlockChainServiceImpl::ProposeBlock(
     grpc::ServerContext* /*ctx*/,
-    const blockchain::BlockProposal* /*request*/,
-    blockchain::BlockVoteResponse* response)
+    const blockchain::Block* blk,
+    blockchain::BlockVoteResponse* resp)
 {
-  // For now, stubbed—actual verify+prune logic lives elsewhere
-  response->set_success(true);
+  std::vector<std::string> leafs;
+  for (auto& a : blk->audits()) {
+    ordered_json j;
+    j["access_type"] = a.access_type();
+    j["file_info"]   = {
+      {"file_id",   a.file_info().file_id()},
+      {"file_name", a.file_info().file_name()}
+    };
+    j["req_id"]    = a.req_id();
+    j["timestamp"] = a.timestamp();
+    j["user_info"] = {
+      {"user_id",   a.user_info().user_id()},
+      {"user_name", a.user_info().user_name()}
+    };
+    leafs.push_back(SHA256Hex(j.dump()));
+  }
+  if (ComputeMerkleRoot(leafs) != blk->merkle_root()) {
+    resp->set_vote(false);
+    resp->set_status("failure");
+    resp->set_error_message("bad merkle_root");
+    return grpc::Status::OK;
+  }
+
+  // 2) prev‐hash
+  if (blk->previous_hash() != chain_.getLastHash()) {
+    resp->set_vote(false);
+    resp->set_status("failure");
+    resp->set_error_message("bad previous_hash");
+    return grpc::Status::OK;
+  }
+
+  // 3) verify each audit’s signature
+  for (auto& a : blk->audits()) {
+    ordered_json j;
+    j["access_type"] = a.access_type();
+    j["file_info"]   = {{"file_id",   a.file_info().file_id()},
+                        {"file_name", a.file_info().file_name()}};
+    j["req_id"]      = a.req_id();
+    j["timestamp"]   = a.timestamp();
+    j["user_info"]   = {{"user_id",   a.user_info().user_id()},
+                        {"user_name", a.user_info().user_name()}};
+    std::string payload = j.dump();
+    if (!VerifySignature(
+          payload,
+          a.signature(),
+          a.public_key()))
+    {
+      resp->set_vote(false);
+      resp->set_status("failure");
+      resp->set_error_message("invalid audit signature: " + a.req_id());
+      return grpc::Status::OK;
+    }
+  }
+
+  resp->set_vote(true);
+  resp->set_status("success");
   return grpc::Status::OK;
 }
 
-grpc::Status BlockChainServiceImpl::VoteOnBlock(
+grpc::Status BlockChainServiceImpl::CommitBlock(
     grpc::ServerContext* /*ctx*/,
-    const blockchain::Vote* request,
-    blockchain::BlockVoteResponse* response)
+    const blockchain::Block* blk,
+    blockchain::BlockCommitResponse* resp) 
 {
-  std::cout << "[VoteOnBlock] block_id="
-            << request->block_id() << std::endl;
-  response->set_success(true);
+  // // 1) verify merkle root
+  // std::vector<std::string> leafs;
+  // for (auto& a : blk->audits()) {
+  //   std::string json;
+  //   google::protobuf::util::MessageToJsonString(a, &json);
+  //   leafs.push_back(SHA256Hex(json));
+  // }
+  // if (ComputeMerkleRoot(leafs) != blk->merkle_root()) {
+  //   resp->set_status("failure");
+  //   resp->set_error_message("bad merkle_root");
+  //   return grpc::Status::OK;
+  // }
+
+  // // 2) verify previous hash matches our chain head
+  // if (blk->previous_block_hash() != chain_.getLastHash()) {
+  //   resp->set_status("failure");
+  //   resp->set_error_message("bad previous_block_hash");
+  //   return grpc::Status::OK;
+  // }
+
+  // // 3) (optional) verify each audit’s signature here…
+
+  // 4) commit into chain.json
+  BlockMeta meta {
+    blk->id(),
+    blk->hash(),
+    blk->previous_hash(),
+    blk->merkle_root()
+  };
+  chain_.append(meta);
+
+  // 5) prune mempool
+  std::vector<std::string> ids;
+  for (auto& a : blk->audits()) ids.push_back(a.req_id());
+  mempool_->RemoveBatch(ids);
+
+  resp->set_status("success");
   return grpc::Status::OK;
 }
+
+
+// grpc::Status BlockChainServiceImpl::VoteOnBlock(
+//     grpc::ServerContext* /*ctx*/,
+//     const blockchain::Vote* request,
+//     blockchain::BlockVoteResponse* response)
+// {
+//   std::cout << "[VoteOnBlock] block_id="
+//             << request->block_id() << std::endl;
+//   response->set_success(true);
+//   return grpc::Status::OK;
+// }

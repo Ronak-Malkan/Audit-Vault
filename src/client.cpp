@@ -66,7 +66,7 @@ static std::vector<unsigned char> SignData(
   return sig;
 }
 
-int main() {
+int main(int argc, char** argv) {
   // 1) Build your audit
   common::FileAudit req;
   req.set_req_id("smoke1");
@@ -100,9 +100,14 @@ int main() {
   // 4) Attach public key
   req.set_public_key(Slurp("../keys/client_public.pem"));
 
+  std::string addr = "0.0.0.0:50051";
+  if (argc > 1) {
+    addr = argv[1];
+  }
+
   // 5) Send
   auto channel = grpc::CreateChannel(
-      "0.0.0.0:50051", grpc::InsecureChannelCredentials());
+      addr, grpc::InsecureChannelCredentials());
   auto stub = fileaudit::FileAuditService::NewStub(channel);
 
   grpc::ClientContext ctx;

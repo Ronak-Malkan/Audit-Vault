@@ -50,6 +50,9 @@ file(GLOB SERVER_SRCS
   "${CMAKE_CURRENT_SOURCE_DIR}/src/config_loader.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/mempool_manager.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/merkle_tree.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/chain_manager.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/leader_config.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/block_scheduler.cpp"
 )
 
 # Client sources
@@ -82,5 +85,20 @@ target_link_libraries(client
     ${PROTOBUF_LIBRARIES}
     Threads::Threads
     OpenSSL::Crypto
+    nlohmann_json::nlohmann_json
+)
+
+# Generate test files as well
+add_executable(test_chain_manager
+  tests/test_chain_manager.cpp
+  src/chain_manager.cpp
+)
+target_include_directories(test_chain_manager PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${CMAKE_CURRENT_BINARY_DIR}/generated
+)
+target_link_libraries(test_chain_manager
+  PRIVATE
+    Threads::Threads
     nlohmann_json::nlohmann_json
 )

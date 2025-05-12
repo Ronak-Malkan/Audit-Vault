@@ -1,6 +1,9 @@
 #include "config_loader.h"
 #include "mempool_manager.h"
 #include "server.h"
+#include "chain_manager.h"
+#include "leader_config.h"
+#include "block_scheduler.h"
 #include <grpcpp/grpcpp.h>
 #include <iostream>
 
@@ -23,10 +26,14 @@ int main(int argc, char** argv) {
                 << "\n";
     }
 
+  // Leader config & chain state
+  LeaderConfig cfg("../leader.json");
+  ChainManager chain("../chain.json");
+
 
   // Services
   FileAuditServiceImpl  file_svc(peers,   mempool);
-  BlockChainServiceImpl block_svc(mempool);
+  BlockChainServiceImpl block_svc(mempool, chain);
 
   // Server
   std::string addr = "0.0.0.0:50051";
@@ -40,6 +47,18 @@ int main(int argc, char** argv) {
 
   auto server = builder.BuildAndStart();
   std::cout << "Server listening on " << addr << std::endl;
+
+  // Block‐proposal scheduler
+  BlockScheduler scheduler(
+    mempool,
+    chain,
+    file_svc.getGossipStubs(),
+    cfg,
+    /* isLeaderFn = */ [&]{ return addr == cfg.getLeaderAddr(); }
+  );
+  scheduler.start();
+
   server->Wait();
+  scheduler.stop();
   return 0;
 }

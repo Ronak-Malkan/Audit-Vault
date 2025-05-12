@@ -1,9 +1,10 @@
 #pragma once
 
-#include "file_audit.grpc.pb.h"
+#include "common.pb.h"     
 #include <mutex>
 #include <string>
 #include <vector>
+#include <google/protobuf/util/json_util.h> 
 
 /// Thread-safe manager for the mempool file.
 class MempoolManager {

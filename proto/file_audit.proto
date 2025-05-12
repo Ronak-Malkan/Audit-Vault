@@ -10,20 +10,8 @@ import "common.proto";
 
 message FileAuditResponse {
   string req_id = 1;
-  string blockchain_tx_hash = 2;
-  BlockHeader block_header = 3;
-  string status = 4;          // "success" or "failure"
-  string error_message = 5;   // Optional error message
-}
-
-message BlockHeader {
-  string block_hash = 1;
-  uint64 block_number = 2;
-  int64 timestamp = 3;
-  string previous_block_hash = 4;
-  string merkle_root = 5;
-  repeated string merkle_proof = 6;
-  repeated string audit_hashes = 7;  // Optional for debug
+  string status = 2;          // "success" or "failure"
+  string error_message = 3;   // Optional error message
 }
 
 service FileAuditService {

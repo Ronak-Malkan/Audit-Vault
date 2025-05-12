@@ -4,6 +4,7 @@
 #include "file_audit.grpc.pb.h"     // fileaudit::FileAuditService, FileAuditResponse
 #include "block_chain.grpc.pb.h"    // blockchain::BlockChainService, etc.
 #include "mempool_manager.h"
+#include "chain_manager.h"
 #include <grpcpp/grpcpp.h>
 #include <memory>
 #include <string>
@@ -16,6 +17,8 @@ public:
   FileAuditServiceImpl(
     const std::vector<std::string>& peers,
     std::shared_ptr<MempoolManager> mempool);
+
+  std::vector<std::unique_ptr<blockchain::BlockChainService::Stub>>& getGossipStubs();
 
   // Note: response is in the fileaudit namespace now
   grpc::Status SubmitAudit(
@@ -32,7 +35,7 @@ private:
 class BlockChainServiceImpl final
     : public blockchain::BlockChainService::Service {
 public:
-  explicit BlockChainServiceImpl(std::shared_ptr<MempoolManager> mempool);
+  explicit BlockChainServiceImpl(std::shared_ptr<MempoolManager> mempool, ChainManager& chain);
 
   grpc::Status WhisperAuditRequest(
       grpc::ServerContext* context,
@@ -41,15 +44,20 @@ public:
 
   grpc::Status ProposeBlock(
       grpc::ServerContext* context,
-      const blockchain::BlockProposal* request,
+      const blockchain::Block* request,
       blockchain::BlockVoteResponse* response) override;
 
-  grpc::Status VoteOnBlock(
+  grpc::Status CommitBlock(
       grpc::ServerContext* context,
-      const blockchain::Vote* request,
-      blockchain::BlockVoteResponse* response) override;
+      const blockchain::Block* request,
+      blockchain::BlockCommitResponse* response) override;
+
+  // grpc::Status VoteOnBlock(
+  //     grpc::ServerContext* context,
+  //     const blockchain::Vote* request,
+  //     blockchain::BlockVoteResponse* response) override;
 
 private:
   std::shared_ptr<MempoolManager> mempool_;
-  std::string                     last_block_hash_;
+  ChainManager&                   chain_;
 };
