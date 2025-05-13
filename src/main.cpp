@@ -4,6 +4,7 @@
 #include "chain_manager.h"
 #include "leader_config.h"
 #include "block_scheduler.h"
+#include "heartbeat_manager.h"
 #include <grpcpp/grpcpp.h>
 #include <iostream>
 
@@ -17,23 +18,25 @@ int main(int argc, char** argv) {
   auto mempool = std::make_shared<MempoolManager>("../mempool.dat");
 
   // 2a) Reload existing audits and report
-    auto pending = mempool->LoadAll();
-    std::cout << "Recovered " << pending.size() 
-            << " audits from mempool:\n";
-    for (auto& a : pending) {
-    std::cout << "  • req_id=" << a.req_id()
-                << ", file_id=" << a.file_info().file_id()
-                << "\n";
-    }
+  auto pending = mempool->LoadAll();
+  std::cout << "Recovered " << pending.size() 
+          << " audits from mempool:\n";
+  for (auto& a : pending) {
+  std::cout << "  • req_id=" << a.req_id()
+              << ", file_id=" << a.file_info().file_id()
+              << "\n";
+  }
 
   // Leader config & chain state
   LeaderConfig cfg("../leader.json");
   ChainManager chain("../chain.json");
 
+  auto hb_table = std::make_shared<HeartbeatTable>(4);
+                
 
   // Services
   FileAuditServiceImpl  file_svc(peers,   mempool);
-  BlockChainServiceImpl block_svc(mempool, chain);
+  BlockChainServiceImpl block_svc(mempool, chain, hb_table);
 
   // Server
   std::string addr = "0.0.0.0:50051";
@@ -54,11 +57,17 @@ int main(int argc, char** argv) {
     chain,
     file_svc.getGossipStubs(),
     cfg,
-    /* isLeaderFn = */ [&]{ return addr == cfg.getLeaderAddr(); }
+    [&]{ return addr == cfg.getLeaderAddr(); }
   );
   scheduler.start();
 
+  HeartbeatManager hb_mgr(
+    peers, addr, cfg, mempool, chain, hb_table
+  );
+  hb_mgr.start();
+
   server->Wait();
   scheduler.stop();
+  hb_mgr.stop();
   return 0;
 }

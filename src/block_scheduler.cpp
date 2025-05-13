@@ -12,6 +12,8 @@
 namespace fs = std::filesystem;
 using ordered_json = nlohmann::ordered_json;
 
+static constexpr auto kPeerRpcTimeoutMs = 200;
+
 BlockScheduler::BlockScheduler(
     std::shared_ptr<MempoolManager> mempool,
     ChainManager&                    chain,
@@ -124,9 +126,14 @@ void BlockScheduler::createAndBroadcastBlock(
   bool all_yes = true;
   for (auto& stub : stubs_) {
     grpc::ClientContext ctx;
+    // enforce a deadline on this RPC
+    ctx.set_deadline(
+      std::chrono::system_clock::now() +
+      std::chrono::milliseconds(kPeerRpcTimeoutMs)
+    );
     blockchain::BlockVoteResponse vote_resp;
     auto status = stub->ProposeBlock(&ctx, block, &vote_resp);
-    if (!status.ok() || !vote_resp.vote()) {
+    if (!vote_resp.vote()) {
       all_yes = false;
       std::cerr << "[Scheduler] proposal rejected: "
                 << (status.ok() ? vote_resp.error_message() : status.error_message())
@@ -139,6 +146,11 @@ void BlockScheduler::createAndBroadcastBlock(
   //CommitBlock RPC
   for (auto& stub : stubs_) {
     grpc::ClientContext ctx;
+    // enforce a deadline on this RPC too
+    ctx.set_deadline(
+       std::chrono::system_clock::now() +
+      std::chrono::milliseconds(kPeerRpcTimeoutMs)
+    );
     blockchain::BlockCommitResponse commit_resp;
     auto status = stub->CommitBlock(&ctx, block, &commit_resp);
     if (!status.ok() || commit_resp.status() != "success") {

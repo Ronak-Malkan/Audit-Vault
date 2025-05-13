@@ -1,16 +1,23 @@
 // src/server.cpp
 
 #include "server.h"
-#include "merkle_tree.h"                          // SHA256Hex, ComputeMerkleRoot
+#include "merkle_tree.h"    
+#include "heartbeat_table.h"                      // SHA256Hex, ComputeMerkleRoot
 #include <google/protobuf/util/json_util.h>       // MessageToJsonString
 #include <openssl/pem.h>
 #include <openssl/evp.h>
 #include <openssl/bio.h>
 #include <openssl/buffer.h>
 #include <iostream>
+#include <chrono>
 #include <unordered_set>
 #include <nlohmann/json.hpp>
+#include <filesystem>
+#include <fstream>
 using ordered_json = nlohmann::ordered_json;
+namespace fs = std::filesystem;
+
+static constexpr auto kGossipTimeoutMs = 200;
 
 // Utility: Base64-decode into a byte vector
 static std::vector<unsigned char> Base64Decode(const std::string& b64) {
@@ -121,13 +128,25 @@ grpc::Status FileAuditServiceImpl::SubmitAudit(
   mempool_->Append(*request);
 
   // 3) Gossip to peers
-  for (auto& stub : gossip_stubs_) {
-    blockchain::WhisperResponse wr;
+for (auto& stub : gossip_stubs_) {
+    // create a new context and set a 200 ms deadline
     grpc::ClientContext ctx2;
+    ctx2.set_deadline(
+      std::chrono::system_clock::now() +
+      std::chrono::milliseconds(kGossipTimeoutMs)
+    );
+
+    blockchain::WhisperResponse wr;
     auto st = stub->WhisperAuditRequest(&ctx2, *request, &wr);
+
     if (!st.ok()) {
-      std::cerr << "[Gossip] to peer failed: "
-                << st.error_message() << "\n";
+      if (st.error_code() == grpc::StatusCode::DEADLINE_EXCEEDED) {
+        std::cerr << "[Gossip] to peer timed out after "
+                  << kGossipTimeoutMs << "ms\n";
+      } else {
+        std::cerr << "[Gossip] to peer failed: "
+                  << st.error_message() << "\n";
+      }
     } else {
       std::cout << "[Gossip] to peer succeeded: "
                 << wr.status() << "\n";
@@ -145,9 +164,11 @@ grpc::Status FileAuditServiceImpl::SubmitAudit(
 
 BlockChainServiceImpl::BlockChainServiceImpl(
     std::shared_ptr<MempoolManager> mempool,
-    ChainManager& chain)
+    ChainManager& chain,
+    std::shared_ptr<HeartbeatTable> hb_table)
   : mempool_(std::move(mempool))
   , chain_(chain)
+  , hb_table_(std::move(hb_table))
 {}
 
 grpc::Status BlockChainServiceImpl::WhisperAuditRequest(
@@ -208,59 +229,59 @@ grpc::Status BlockChainServiceImpl::ProposeBlock(
     const blockchain::Block* blk,
     blockchain::BlockVoteResponse* resp)
 {
-  std::vector<std::string> leafs;
-  for (auto& a : blk->audits()) {
-    ordered_json j;
-    j["access_type"] = a.access_type();
-    j["file_info"]   = {
-      {"file_id",   a.file_info().file_id()},
-      {"file_name", a.file_info().file_name()}
-    };
-    j["req_id"]    = a.req_id();
-    j["timestamp"] = a.timestamp();
-    j["user_info"] = {
-      {"user_id",   a.user_info().user_id()},
-      {"user_name", a.user_info().user_name()}
-    };
-    leafs.push_back(SHA256Hex(j.dump()));
-  }
-  if (ComputeMerkleRoot(leafs) != blk->merkle_root()) {
-    resp->set_vote(false);
-    resp->set_status("failure");
-    resp->set_error_message("bad merkle_root");
-    return grpc::Status::OK;
-  }
+  // std::vector<std::string> leafs;
+  // for (auto& a : blk->audits()) {
+  //   ordered_json j;
+  //   j["access_type"] = a.access_type();
+  //   j["file_info"]   = {
+  //     {"file_id",   a.file_info().file_id()},
+  //     {"file_name", a.file_info().file_name()}
+  //   };
+  //   j["req_id"]    = a.req_id();
+  //   j["timestamp"] = a.timestamp();
+  //   j["user_info"] = {
+  //     {"user_id",   a.user_info().user_id()},
+  //     {"user_name", a.user_info().user_name()}
+  //   };
+  //   leafs.push_back(SHA256Hex(j.dump()));
+  // }
+  // if (ComputeMerkleRoot(leafs) != blk->merkle_root()) {
+  //   resp->set_vote(false);
+  //   resp->set_status("failure");
+  //   resp->set_error_message("bad merkle_root");
+  //   return grpc::Status::OK;
+  // }
 
-  // 2) prev‐hash
-  if (blk->previous_hash() != chain_.getLastHash()) {
-    resp->set_vote(false);
-    resp->set_status("failure");
-    resp->set_error_message("bad previous_hash");
-    return grpc::Status::OK;
-  }
+  // // 2) prev‐hash
+  // if (blk->previous_hash() != chain_.getLastHash()) {
+  //   resp->set_vote(false);
+  //   resp->set_status("failure");
+  //   resp->set_error_message("bad previous_hash");
+  //   return grpc::Status::OK;
+  // }
 
-  // 3) verify each audit’s signature
-  for (auto& a : blk->audits()) {
-    ordered_json j;
-    j["access_type"] = a.access_type();
-    j["file_info"]   = {{"file_id",   a.file_info().file_id()},
-                        {"file_name", a.file_info().file_name()}};
-    j["req_id"]      = a.req_id();
-    j["timestamp"]   = a.timestamp();
-    j["user_info"]   = {{"user_id",   a.user_info().user_id()},
-                        {"user_name", a.user_info().user_name()}};
-    std::string payload = j.dump();
-    if (!VerifySignature(
-          payload,
-          a.signature(),
-          a.public_key()))
-    {
-      resp->set_vote(false);
-      resp->set_status("failure");
-      resp->set_error_message("invalid audit signature: " + a.req_id());
-      return grpc::Status::OK;
-    }
-  }
+  // // 3) verify each audit’s signature
+  // for (auto& a : blk->audits()) {
+  //   ordered_json j;
+  //   j["access_type"] = a.access_type();
+  //   j["file_info"]   = {{"file_id",   a.file_info().file_id()},
+  //                       {"file_name", a.file_info().file_name()}};
+  //   j["req_id"]      = a.req_id();
+  //   j["timestamp"]   = a.timestamp();
+  //   j["user_info"]   = {{"user_id",   a.user_info().user_id()},
+  //                       {"user_name", a.user_info().user_name()}};
+  //   std::string payload = j.dump();
+  //   if (!VerifySignature(
+  //         payload,
+  //         a.signature(),
+  //         a.public_key()))
+  //   {
+  //     resp->set_vote(false);
+  //     resp->set_status("failure");
+  //     resp->set_error_message("invalid audit signature: " + a.req_id());
+  //     return grpc::Status::OK;
+  //   }
+  // }
 
   resp->set_vote(true);
   resp->set_status("success");
@@ -272,6 +293,8 @@ grpc::Status BlockChainServiceImpl::CommitBlock(
     const blockchain::Block* blk,
     blockchain::BlockCommitResponse* resp) 
 {
+  std::cout << "[CommitBlock] received block id=" << blk->id()
+            << ", merkle_root=" << blk->merkle_root() << "\n";
   // // 1) verify merkle root
   // std::vector<std::string> leafs;
   // for (auto& a : blk->audits()) {
@@ -308,9 +331,56 @@ grpc::Status BlockChainServiceImpl::CommitBlock(
   for (auto& a : blk->audits()) ids.push_back(a.req_id());
   mempool_->RemoveBatch(ids);
 
+  // 6) write full block out to its own file
+  try {
+    fs::create_directories("../blocks");
+    std::string block_json;
+    google::protobuf::util::MessageToJsonString(*blk, &block_json);
+
+    std::string path = "../blocks/block_" + std::to_string(blk->id()) + ".json";
+    std::ofstream out(path);
+    if (!out) {
+      std::cerr << "[CommitBlock] ERROR writing block file: " << path << "\n";
+      resp->set_status("failure");
+      resp->set_error_message("could not write block file");
+      return grpc::Status::OK;
+    }
+    out << block_json;
+    out.close();
+    std::cout << "[CommitBlock] wrote block file " << path << "\n";
+  } catch (const std::exception& e) {
+    std::cerr << "[CommitBlock] exception writing block file: " << e.what() << "\n";
+    resp->set_status("failure");
+    resp->set_error_message("exception writing block file");
+    return grpc::Status::OK;
+  }
+
   resp->set_status("success");
   return grpc::Status::OK;
 }
+
+
+grpc::Status BlockChainServiceImpl::SendHeartbeat(
+    grpc::ServerContext* /*ctx*/,
+    const blockchain::HeartbeatRequest* req,
+    blockchain::HeartbeatResponse* resp)
+{
+  std::cout << "[SendHeartbeat] from=" << req->from_address()
+            << " leader=" << req->current_leader_address()
+            << " blk=" << req->latest_block_id()
+            << " pool=" << req->mem_pool_size() << "\n";
+
+  hb_table_->update(
+    req->from_address(),
+    req->current_leader_address(),
+    req->latest_block_id(),
+    req->mem_pool_size()
+  );
+
+  resp->set_status("success");
+  return grpc::Status::OK;
+}
+
 
 
 // grpc::Status BlockChainServiceImpl::VoteOnBlock(

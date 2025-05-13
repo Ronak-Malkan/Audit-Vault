@@ -1,5 +1,5 @@
 {
   "leader_addr": "0.0.0.0:50051",
-  "batch_size": 5,
+  "batch_size": 10,
   "batch_interval_s": 15
 }

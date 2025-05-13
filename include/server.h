@@ -5,6 +5,7 @@
 #include "block_chain.grpc.pb.h"    // blockchain::BlockChainService, etc.
 #include "mempool_manager.h"
 #include "chain_manager.h"
+#include "heartbeat_table.h"
 #include <grpcpp/grpcpp.h>
 #include <memory>
 #include <string>
@@ -35,7 +36,9 @@ private:
 class BlockChainServiceImpl final
     : public blockchain::BlockChainService::Service {
 public:
-  explicit BlockChainServiceImpl(std::shared_ptr<MempoolManager> mempool, ChainManager& chain);
+  explicit BlockChainServiceImpl(std::shared_ptr<MempoolManager> mempool,
+      ChainManager& chain,
+      std::shared_ptr<HeartbeatTable> hb_table);
 
   grpc::Status WhisperAuditRequest(
       grpc::ServerContext* context,
@@ -52,6 +55,11 @@ public:
       const blockchain::Block* request,
       blockchain::BlockCommitResponse* response) override;
 
+  grpc::Status SendHeartbeat(
+      grpc::ServerContext* context,
+      const blockchain::HeartbeatRequest* request,
+      blockchain::HeartbeatResponse* response) override;
+
   // grpc::Status VoteOnBlock(
   //     grpc::ServerContext* context,
   //     const blockchain::Vote* request,
@@ -60,4 +68,5 @@ public:
 private:
   std::shared_ptr<MempoolManager> mempool_;
   ChainManager&                   chain_;
+  std::shared_ptr<HeartbeatTable> hb_table_;
 };
