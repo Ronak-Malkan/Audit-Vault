@@ -82,7 +82,7 @@ cd build
 ./client
 ```
 
-##Configuration
+## Configuration
 
 peer.json:
 
