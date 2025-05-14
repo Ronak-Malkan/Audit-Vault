@@ -54,10 +54,33 @@ message HeartbeatResponse {
   string error_message = 2;  
 }
 
+message TriggerElectionRequest {
+  int64 term = 1;
+  string address = 2;
+}
+
+message TriggerElectionResponse {
+  bool vote = 1;
+  int64 term = 2;
+  string status = 3;
+  string error_message = 4;
+}
+
+message NotifyLeadershipRequest {
+  string address = 1;
+}
+
+message NotifyLeadershipResponse {
+  string status = 1;
+  string error_message = 2;
+}
+
 service BlockChainService {
   rpc WhisperAuditRequest (common.FileAudit) returns (WhisperResponse);
   rpc ProposeBlock (Block) returns (BlockVoteResponse);
   rpc CommitBlock (Block) returns (BlockCommitResponse);
   rpc GetBlock (GetBlockRequest) returns (GetBlockResponse);
   rpc SendHeartbeat (HeartbeatRequest) returns (HeartbeatResponse);
+  rpc TriggerElection (TriggerElectionRequest) returns (TriggerElectionResponse);
+  rpc NotifyLeadership (NotifyLeadershipRequest) returns (NotifyLeadershipResponse);
 }

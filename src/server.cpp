@@ -2,7 +2,8 @@
 
 #include "server.h"
 #include "merkle_tree.h"    
-#include "heartbeat_table.h"                      // SHA256Hex, ComputeMerkleRoot
+#include "heartbeat_table.h"   
+#include "election_state.h"                   // SHA256Hex, ComputeMerkleRoot
 #include <google/protobuf/util/json_util.h>       // MessageToJsonString
 #include <openssl/pem.h>
 #include <openssl/evp.h>
@@ -14,8 +15,13 @@
 #include <nlohmann/json.hpp>
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 using ordered_json = nlohmann::ordered_json;
 namespace fs = std::filesystem;
+using namespace std::chrono;
+
+using google::protobuf::util::MessageToJsonString;
+using google::protobuf::util::JsonStringToMessage;
 
 static constexpr auto kGossipTimeoutMs = 200;
 
@@ -165,10 +171,14 @@ for (auto& stub : gossip_stubs_) {
 BlockChainServiceImpl::BlockChainServiceImpl(
     std::shared_ptr<MempoolManager> mempool,
     ChainManager& chain,
-    std::shared_ptr<HeartbeatTable> hb_table)
+    std::shared_ptr<HeartbeatTable> hb_table,
+    ElectionState& election_state,
+    std::string self_addr)
   : mempool_(std::move(mempool))
   , chain_(chain)
   , hb_table_(std::move(hb_table))
+  , state_(election_state)
+  , self_addr_(std::move(self_addr))
 {}
 
 grpc::Status BlockChainServiceImpl::WhisperAuditRequest(
@@ -359,6 +369,45 @@ grpc::Status BlockChainServiceImpl::CommitBlock(
   return grpc::Status::OK;
 }
 
+grpc::Status BlockChainServiceImpl::GetBlock(
+    grpc::ServerContext* /*ctx*/,
+    const blockchain::GetBlockRequest* req,
+    blockchain::GetBlockResponse* resp)
+{
+  int64_t id = req->id();
+  if (id <= 0 || id > chain_.getLastID()) {
+    resp->set_status("failure");
+    resp->set_error_message("block id out of range");
+    return grpc::Status::OK;
+  }
+
+  // Read the JSON file we wrote earlier
+  std::string path = "../blocks/block_" + std::to_string(id) + ".json";
+  std::ifstream in(path);
+  if (!in) {
+    resp->set_status("failure");
+    resp->set_error_message("could not open block file");
+    return grpc::Status::OK;
+  }
+  std::stringstream buf;
+  buf << in.rdbuf();
+  std::string json = buf.str();
+
+  // Parse back into a Block proto
+  blockchain::Block blk;
+  auto st = JsonStringToMessage(json, &blk);
+  if (!st.ok()) {
+    resp->set_status("failure");
+    resp->set_error_message("JSON parse error: " + st.ToString());
+    return grpc::Status::OK;
+  }
+
+  // Return it
+  *resp->mutable_block() = std::move(blk);
+  resp->set_status("success");
+  return grpc::Status::OK;
+}
+
 
 grpc::Status BlockChainServiceImpl::SendHeartbeat(
     grpc::ServerContext* /*ctx*/,
@@ -377,6 +426,57 @@ grpc::Status BlockChainServiceImpl::SendHeartbeat(
     req->mem_pool_size()
   );
 
+  resp->set_status("success");
+  return grpc::Status::OK;
+}
+
+
+// --- TriggerElection: vote yes/no and record voted_for ---
+grpc::Status BlockChainServiceImpl::TriggerElection(
+    grpc::ServerContext* /*ctx*/,
+    const blockchain::TriggerElectionRequest* req,
+    blockchain::TriggerElectionResponse* resp)
+{
+  const auto& candidate = req->address();
+
+  // Look up candidate’s stats from heartbeat table
+  int64_t cand_blocks = 0, cand_pool = 0;
+  for (auto& e : hb_table_->all()) {
+    if (e.from_address == candidate) {
+      cand_blocks = e.latest_block_id;
+      cand_pool   = e.mem_pool_size;
+      break;
+    }
+  }
+
+  // Our own stats
+  int64_t my_blocks = chain_.getLastID();
+  int64_t my_pool   = static_cast<int64_t>(mempool_->LoadAll().size());
+
+  bool vote_yes = false;
+  if (cand_blocks > my_blocks ||
+      (cand_blocks == my_blocks && cand_pool   > my_pool)   ||
+      (cand_blocks == my_blocks && cand_pool   == my_pool &&
+       candidate > self_addr_))
+  {
+    vote_yes = true;
+    state_.setVotedFor(candidate);
+  }
+
+  resp->set_vote(vote_yes);
+  resp->set_term(0);              // unused
+  resp->set_status("success");
+  return grpc::Status::OK;
+}
+
+// --- NotifyLeadership: record new leader in state ---
+grpc::Status BlockChainServiceImpl::NotifyLeadership(
+    grpc::ServerContext* /*ctx*/,
+    const blockchain::NotifyLeadershipRequest* req,
+    blockchain::NotifyLeadershipResponse* resp)
+{
+  state_.setLeader(req->address());
+  std::cout << "[NotifyLeadership] new leader = " << req->address() << "\n";
   resp->set_status("success");
   return grpc::Status::OK;
 }

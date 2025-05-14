@@ -6,6 +6,7 @@
 #include "mempool_manager.h"
 #include "chain_manager.h"
 #include "heartbeat_table.h"
+#include "election_state.h"
 #include <grpcpp/grpcpp.h>
 #include <memory>
 #include <string>
@@ -33,12 +34,14 @@ private:
 };
 
 /// Handles incoming gossip & block proposals.
-class BlockChainServiceImpl final
-    : public blockchain::BlockChainService::Service {
+class BlockChainServiceImpl final : public blockchain::BlockChainService::Service {
 public:
-  explicit BlockChainServiceImpl(std::shared_ptr<MempoolManager> mempool,
+  BlockChainServiceImpl(
+      std::shared_ptr<MempoolManager> mempool,
       ChainManager& chain,
-      std::shared_ptr<HeartbeatTable> hb_table);
+      std::shared_ptr<HeartbeatTable> hb_table,
+      ElectionState& election_state,
+      std::string self_addr);
 
   grpc::Status WhisperAuditRequest(
       grpc::ServerContext* context,
@@ -55,10 +58,25 @@ public:
       const blockchain::Block* request,
       blockchain::BlockCommitResponse* response) override;
 
+  grpc::Status GetBlock(
+      grpc::ServerContext* context,
+      const blockchain::GetBlockRequest* request,
+      blockchain::GetBlockResponse* response) override;
+
   grpc::Status SendHeartbeat(
       grpc::ServerContext* context,
       const blockchain::HeartbeatRequest* request,
       blockchain::HeartbeatResponse* response) override;
+
+  grpc::Status TriggerElection(
+      grpc::ServerContext* context,
+      const blockchain::TriggerElectionRequest* request,
+      blockchain::TriggerElectionResponse* response) override;
+
+  grpc::Status NotifyLeadership(
+      grpc::ServerContext* context,
+      const blockchain::NotifyLeadershipRequest* request,
+      blockchain::NotifyLeadershipResponse* response) override;
 
   // grpc::Status VoteOnBlock(
   //     grpc::ServerContext* context,
@@ -69,4 +87,6 @@ private:
   std::shared_ptr<MempoolManager> mempool_;
   ChainManager&                   chain_;
   std::shared_ptr<HeartbeatTable> hb_table_;
+  ElectionState&                  state_;
+  std::string                     self_addr_;
 };

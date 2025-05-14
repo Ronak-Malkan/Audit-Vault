@@ -54,6 +54,7 @@ file(GLOB SERVER_SRCS
   "${CMAKE_CURRENT_SOURCE_DIR}/src/leader_config.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/block_scheduler.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/heartbeat_manager.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/election_manager.cpp"
 )
 
 # Client sources

@@ -5,6 +5,8 @@
 #include "leader_config.h"
 #include "block_scheduler.h"
 #include "heartbeat_manager.h"
+#include "election_state.h"
+#include "election_manager.h"
 #include <grpcpp/grpcpp.h>
 #include <iostream>
 
@@ -31,18 +33,20 @@ int main(int argc, char** argv) {
   LeaderConfig cfg("../leader.json");
   ChainManager chain("../chain.json");
 
-  auto hb_table = std::make_shared<HeartbeatTable>(4);
-                
+  auto hb_table = std::make_shared<HeartbeatTable>(15);
 
-  // Services
-  FileAuditServiceImpl  file_svc(peers,   mempool);
-  BlockChainServiceImpl block_svc(mempool, chain, hb_table);
+  ElectionState election_state;    
 
-  // Server
+  
   std::string addr = "0.0.0.0:50051";
   if (argc > 1) {
     addr = argv[1];
   }
+
+  // Services
+  FileAuditServiceImpl  file_svc(peers,   mempool);
+  BlockChainServiceImpl block_svc(mempool, chain, hb_table, election_state, addr);
+
   grpc::ServerBuilder builder;
   builder.AddListeningPort(addr, grpc::InsecureServerCredentials());
   builder.RegisterService(&file_svc);
@@ -57,17 +61,24 @@ int main(int argc, char** argv) {
     chain,
     file_svc.getGossipStubs(),
     cfg,
-    [&]{ return addr == cfg.getLeaderAddr(); }
+    [&]{ return election_state.getLeader() == addr; }
   );
   scheduler.start();
 
   HeartbeatManager hb_mgr(
-    peers, addr, cfg, mempool, chain, hb_table
+    peers, addr, election_state, mempool, chain, hb_table
   );
   hb_mgr.start();
+
+  ElectionManager election_mgr(
+    peers, addr, hb_table, election_state, mempool, chain
+  );
+  election_mgr.start();
 
   server->Wait();
   scheduler.stop();
   hb_mgr.stop();
+  election_mgr.stop();
+
   return 0;
 }
