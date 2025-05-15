@@ -86,12 +86,18 @@ void HeartbeatManager::syncMissingBlocks() {
   auto entries   = table_->all();
   int64_t local  = chain_.getLastID();
   int64_t highest = local;
+  std::cout << "[Sync] local block id: " << local << "\n";
+
   std::string best;
   for (auto& e : entries) {
+    std::cout << "[Sync] peer " << e.from_address
+         << " has block id " << e.latest_block_id
+         << " (alive=" << e.alive << ")\n";
     if (e.alive &&
         e.from_address != self_addr_ &&
         e.latest_block_id > highest)
     {
+
       highest = e.latest_block_id;
       best    = e.from_address;
     }

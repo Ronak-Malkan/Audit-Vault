@@ -59,7 +59,7 @@ void ChainManager::writeToDisk() const {
 
 int64_t ChainManager::getLastID() const {
   std::lock_guard<std::mutex> lk(mu_);
-  return blocks_.empty() ? 0 : blocks_.back().id;
+  return blocks_.empty() ? -1 : blocks_.back().id;
 }
 
 std::string ChainManager::getLastHash() const {

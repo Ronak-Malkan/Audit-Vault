@@ -39,6 +39,7 @@ void ElectionManager::stop() {
 }
 
 void ElectionManager::loop() {
+  std::this_thread::sleep_for(std::chrono::seconds(30));
   while (running_) {
     // 1) sweep stale heartbeats
     hb_table_->sweep();
@@ -73,6 +74,11 @@ void ElectionManager::loop() {
         auto status = stubs_[i]->TriggerElection(&ctx, req, &resp);
         if (status.ok() && resp.vote()) {
           votes++;
+          std::cout << "[ElectionManager] got vote from " << peer_addrs_[i]
+                    << "\n";
+        } else {
+          std::cout << "[ElectionManager] no vote from " << peer_addrs_[i]
+                    << ": " << status.error_message() << "\n";
         }
       }
 

@@ -426,6 +426,13 @@ grpc::Status BlockChainServiceImpl::SendHeartbeat(
     req->mem_pool_size()
   );
 
+  if (state_.getLeader().empty() && !req->current_leader_address().empty()) {
+    state_.setLeader(req->current_leader_address());
+    std::cout << "[SendHeartbeat] learned new leader: "
+                << state_.getLeader() << "\n";
+  }
+  
+
   resp->set_status("success");
   return grpc::Status::OK;
 }

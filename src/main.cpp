@@ -38,7 +38,7 @@ int main(int argc, char** argv) {
   ElectionState election_state;    
 
   
-  std::string addr = "0.0.0.0:50051";
+  std::string addr = "169.254.62.157:50051";
   if (argc > 1) {
     addr = argv[1];
   }
