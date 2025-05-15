@@ -120,11 +120,32 @@ void BlockScheduler::createAndBroadcastBlock(
     *block.add_audits() = a;
   }
 
-  // 4) Compute block_hash
-  block.set_hash("");
-  std::string serialized;
-  block.SerializeToString(&serialized);
-  block.set_hash(SHA256Hex(serialized));
+  // 4) Compute block_hash by concatenating:
+//    id + previous_hash + merkle_root + JSON(audit1)+JSON(audit2)+…
+  std::string audits_concat;
+  audits_concat.reserve(pending.size() * 128);  // pre-reserve for efficiency
+  for (auto& a : pending) {
+    ordered_json j2;
+    j2["access_type"] = a.access_type();
+    j2["file_info"]   = {
+      {"file_id",   a.file_info().file_id()},
+      {"file_name", a.file_info().file_name()}
+    };
+    j2["req_id"]      = a.req_id();
+    j2["timestamp"]   = a.timestamp();
+    j2["user_info"]   = {
+      {"user_id",   a.user_info().user_id()},
+      {"user_name", a.user_info().user_name()}
+    };
+    // exactly the same compact, sorted JSON string your Python code uses:
+    audits_concat += j2.dump();
+  }
+  // build exactly: "<id><previous_hash><merkle_root><audits_json…>"
+  std::string header = std::to_string(id)
+                    + block.previous_hash()
+                    + merkle
+                    + audits_concat;
+  block.set_hash(SHA256Hex(header));
 
 
   // 6) Send ProposeBlock to all peers

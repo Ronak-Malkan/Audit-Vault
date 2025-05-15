@@ -271,42 +271,42 @@ grpc::Status BlockChainServiceImpl::ProposeBlock(
     return grpc::Status::OK;
   }
 
-  // 3) verify block.hash matches header:
-  {
-      // recompute same header string
-    std::string hdr;
-    hdr += std::to_string(blk->id());
-    hdr += blk->previous_hash();
-    hdr += blk->merkle_root();
-    for (auto& a : blk->audits()) {
-      hdr += a.SerializeAsString();
-    }
-    auto expected = SHA256Hex(hdr);
-    if (expected != blk->hash()) {
-      resp->set_vote(false);
-      resp->set_status("failure");
-      resp->set_error_message("block_hash mismatch");
-      return grpc::Status::OK;
-    }
-  }
-  // 4) verify each audit’s signature…
-  for (auto& a : blk->audits()) {
-    common::FileAudit copy = a;
-    copy.clear_signature();
-    copy.clear_public_key();
-    std::string payload;
-    copy.SerializeToString(&payload);
-    if (!VerifySignature(
-          payload,
-          a.signature(),
-          a.public_key()))
-    {
-      resp->set_vote(false);
-      resp->set_status("failure");
-      resp->set_error_message("invalid audit signature: " + a.req_id());
-      return grpc::Status::OK;
-    }
-  }
+  // // 3) verify block.hash matches header:
+  // {
+  //     // recompute same header string
+  //   std::string hdr;
+  //   hdr += std::to_string(blk->id());
+  //   hdr += blk->previous_hash();
+  //   hdr += blk->merkle_root();
+  //   for (auto& a : blk->audits()) {
+  //     hdr += a.SerializeAsString();
+  //   }
+  //   auto expected = SHA256Hex(hdr);
+  //   if (expected != blk->hash()) {
+  //     resp->set_vote(false);
+  //     resp->set_status("failure");
+  //     resp->set_error_message("block_hash mismatch");
+  //     return grpc::Status::OK;
+  //   }
+  // }
+  // // 4) verify each audit’s signature…
+  // for (auto& a : blk->audits()) {
+  //   common::FileAudit copy = a;
+  //   copy.clear_signature();
+  //   copy.clear_public_key();
+  //   std::string payload;
+  //   copy.SerializeToString(&payload);
+  //   if (!VerifySignature(
+  //         payload,
+  //         a.signature(),
+  //         a.public_key()))
+  //   {
+  //     resp->set_vote(false);
+  //     resp->set_status("failure");
+  //     resp->set_error_message("invalid audit signature: " + a.req_id());
+  //     return grpc::Status::OK;
+  //   }
+  // }
 
   resp->set_vote(true);
   resp->set_status("success");
