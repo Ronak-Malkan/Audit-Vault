@@ -38,6 +38,13 @@ std::vector<common::FileAudit> MempoolManager::LoadAll() const {
 
   std::string line;
   while (std::getline(in, line)) {
+    // trim whitespace
+    auto first = line.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos) {
+      // blank or all-whitespace: skip
+      continue;
+    }
+
     common::FileAudit a;
     auto status = JsonStringToMessage(line, &a);
     if (!status.ok()) {
@@ -49,6 +56,7 @@ std::vector<common::FileAudit> MempoolManager::LoadAll() const {
   }
   return all;
 }
+
 
 // Remove a batch of req_ids by rewriting the file
 void MempoolManager::RemoveBatch(const std::vector<std::string>& ids) {

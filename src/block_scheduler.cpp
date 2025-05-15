@@ -79,10 +79,14 @@ void BlockScheduler::loop() {
 void BlockScheduler::createAndBroadcastBlock(
     std::vector<common::FileAudit> pending
 ) {
-  // 1) Sort pending by timestamp
-  std::sort(pending.begin(), pending.end(),
-    [](auto& a, auto& b){ return a.timestamp() < b.timestamp(); }
-  );
+  // 1) Sort pending by (timestamp, req_id)
+   std::sort(pending.begin(), pending.end(),
+     [](auto& a, auto& b){
+       if (a.timestamp() != b.timestamp())
+         return a.timestamp() < b.timestamp();
+       return a.req_id() < b.req_id();
+     }
+   );
 
   // 2) Build Merkle root
   std::vector<std::string> leaf_hashes;
@@ -101,7 +105,8 @@ void BlockScheduler::createAndBroadcastBlock(
       {"user_name", a.user_info().user_name()}
     };
     leaf_hashes.push_back(SHA256Hex(j.dump()));
-  }
+   }
+  
   auto merkle = ComputeMerkleRoot(leaf_hashes);
 
   // 3) Fill Block proto

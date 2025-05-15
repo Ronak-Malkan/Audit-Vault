@@ -20,7 +20,7 @@ struct HeartbeatEntry {
 class HeartbeatTable {
 public:
   /// timeout_sec: how long before we mark a peer dead.
-  explicit HeartbeatTable(int timeout_sec = 4)
+  explicit HeartbeatTable(int timeout_sec)
     : timeout_(std::chrono::seconds(timeout_sec)) {}
 
   /// Called whenever we get a heartbeat from `from`.  

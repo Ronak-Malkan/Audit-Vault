@@ -239,59 +239,74 @@ grpc::Status BlockChainServiceImpl::ProposeBlock(
     const blockchain::Block* blk,
     blockchain::BlockVoteResponse* resp)
 {
-  // std::vector<std::string> leafs;
-  // for (auto& a : blk->audits()) {
-  //   ordered_json j;
-  //   j["access_type"] = a.access_type();
-  //   j["file_info"]   = {
-  //     {"file_id",   a.file_info().file_id()},
-  //     {"file_name", a.file_info().file_name()}
-  //   };
-  //   j["req_id"]    = a.req_id();
-  //   j["timestamp"] = a.timestamp();
-  //   j["user_info"] = {
-  //     {"user_id",   a.user_info().user_id()},
-  //     {"user_name", a.user_info().user_name()}
-  //   };
-  //   leafs.push_back(SHA256Hex(j.dump()));
-  // }
-  // if (ComputeMerkleRoot(leafs) != blk->merkle_root()) {
-  //   resp->set_vote(false);
-  //   resp->set_status("failure");
-  //   resp->set_error_message("bad merkle_root");
-  //   return grpc::Status::OK;
-  // }
+  // 1) Recompute Merkle root from the same JSON-hashes Python uses
+  std::vector<std::string> leafs;
+  for (auto& a : blk->audits()) {
+    ordered_json j;
+    j["access_type"] = a.access_type();
+    j["file_info"]   = {
+      {"file_id",   a.file_info().file_id()},
+      {"file_name", a.file_info().file_name()}
+    };
+    j["req_id"]      = a.req_id();
+    j["timestamp"]   = a.timestamp();
+    j["user_info"]   = {
+      {"user_id",   a.user_info().user_id()},
+      {"user_name", a.user_info().user_name()}
+    };
+    leafs.push_back(SHA256Hex(j.dump()));
+  }
+  if (ComputeMerkleRoot(leafs) != blk->merkle_root()) {
+    resp->set_vote(false);
+    resp->set_status("failure");
+    resp->set_error_message("bad merkle_root");
+    return grpc::Status::OK;
+  }
 
-  // // 2) prev‐hash
-  // if (blk->previous_hash() != chain_.getLastHash()) {
-  //   resp->set_vote(false);
-  //   resp->set_status("failure");
-  //   resp->set_error_message("bad previous_hash");
-  //   return grpc::Status::OK;
-  // }
+  // 2) prev‐hash
+  if (blk->previous_hash() != chain_.getLastHash()) {
+    resp->set_vote(false);
+    resp->set_status("failure");
+    resp->set_error_message("bad previous_hash");
+    return grpc::Status::OK;
+  }
 
-  // // 3) verify each audit’s signature
-  // for (auto& a : blk->audits()) {
-  //   ordered_json j;
-  //   j["access_type"] = a.access_type();
-  //   j["file_info"]   = {{"file_id",   a.file_info().file_id()},
-  //                       {"file_name", a.file_info().file_name()}};
-  //   j["req_id"]      = a.req_id();
-  //   j["timestamp"]   = a.timestamp();
-  //   j["user_info"]   = {{"user_id",   a.user_info().user_id()},
-  //                       {"user_name", a.user_info().user_name()}};
-  //   std::string payload = j.dump();
-  //   if (!VerifySignature(
-  //         payload,
-  //         a.signature(),
-  //         a.public_key()))
-  //   {
-  //     resp->set_vote(false);
-  //     resp->set_status("failure");
-  //     resp->set_error_message("invalid audit signature: " + a.req_id());
-  //     return grpc::Status::OK;
-  //   }
-  // }
+  // 3) verify block.hash matches header:
+  {
+      // recompute same header string
+    std::string hdr;
+    hdr += std::to_string(blk->id());
+    hdr += blk->previous_hash();
+    hdr += blk->merkle_root();
+    for (auto& a : blk->audits()) {
+      hdr += a.SerializeAsString();
+    }
+    auto expected = SHA256Hex(hdr);
+    if (expected != blk->hash()) {
+      resp->set_vote(false);
+      resp->set_status("failure");
+      resp->set_error_message("block_hash mismatch");
+      return grpc::Status::OK;
+    }
+  }
+  // 4) verify each audit’s signature…
+  for (auto& a : blk->audits()) {
+    common::FileAudit copy = a;
+    copy.clear_signature();
+    copy.clear_public_key();
+    std::string payload;
+    copy.SerializeToString(&payload);
+    if (!VerifySignature(
+          payload,
+          a.signature(),
+          a.public_key()))
+    {
+      resp->set_vote(false);
+      resp->set_status("failure");
+      resp->set_error_message("invalid audit signature: " + a.req_id());
+      return grpc::Status::OK;
+    }
+  }
 
   resp->set_vote(true);
   resp->set_status("success");
@@ -375,7 +390,7 @@ grpc::Status BlockChainServiceImpl::GetBlock(
     blockchain::GetBlockResponse* resp)
 {
   int64_t id = req->id();
-  if (id <= 0 || id > chain_.getLastID()) {
+  if (id > chain_.getLastID()) {
     resp->set_status("failure");
     resp->set_error_message("block id out of range");
     return grpc::Status::OK;
