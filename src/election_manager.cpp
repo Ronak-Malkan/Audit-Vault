@@ -58,8 +58,7 @@ void ElectionManager::loop() {
       std::cout << "[ElectionManager] triggering election\n";
 
       // 2) vote for self
-      int votes = 1;
-      const int majority = (int)peer_addrs_.size()/2 + 1;
+      int votesAccept = 0, votesReject = 0;
 
       // 3) ask others
       for (size_t i = 0; i < stubs_.size(); ++i) {
@@ -73,17 +72,18 @@ void ElectionManager::loop() {
 
         auto status = stubs_[i]->TriggerElection(&ctx, req, &resp);
         if (status.ok() && resp.vote()) {
-          votes++;
+          votesAccept++;
           std::cout << "[ElectionManager] got vote from " << peer_addrs_[i]
                     << "\n";
         } else {
+          votesReject++;
           std::cout << "[ElectionManager] no vote from " << peer_addrs_[i]
                     << ": " << status.error_message() << "\n";
         }
       }
 
       // 4) if won majority
-      if (votes >= majority) {
+      if (votesAccept >= votesReject) {
         state_.setLeader(self_addr_);
         std::cout << "[ElectionManager] I won election, leader=" << self_addr_ << "\n";
 
@@ -98,7 +98,7 @@ void ElectionManager::loop() {
           stubs_[i]->NotifyLeadership(&ctx, req2, &resp2);
         }
       } else {
-        std::cout << "[ElectionManager] lost election (" << votes
+        std::cout << "[ElectionManager] lost election (" << votesAccept
                   << "/" << peer_addrs_.size() << ")\n";
       }
     }
