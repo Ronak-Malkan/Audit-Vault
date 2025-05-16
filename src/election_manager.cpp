@@ -58,7 +58,7 @@ void ElectionManager::loop() {
       std::cout << "[ElectionManager] triggering election\n";
 
       // 2) vote for self
-      int votesAccept = 0, votesReject = 0;
+      int votesAccept = 1, votesReject = 0;
 
       // 3) ask others
       for (size_t i = 0; i < stubs_.size(); ++i) {
@@ -71,16 +71,19 @@ void ElectionManager::loop() {
         blockchain::TriggerElectionResponse resp;
 
         auto status = stubs_[i]->TriggerElection(&ctx, req, &resp);
-        if (status.ok() && resp.vote()) {
+        if (resp.vote()) {
           votesAccept++;
           std::cout << "[ElectionManager] got vote from " << peer_addrs_[i]
                     << "\n";
-        } else {
+        } else if(resp.vote() == false && status.ok()) {
           votesReject++;
           std::cout << "[ElectionManager] no vote from " << peer_addrs_[i]
                     << ": " << status.error_message() << "\n";
         }
       }
+
+      std::cout << "[ElectionManager] votes: " << votesAccept
+           << " accept, " << votesReject << " reject\n";
 
       // 4) if won majority
       if (votesAccept >= votesReject) {

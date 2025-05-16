@@ -97,7 +97,8 @@ void HeartbeatManager::syncMissingBlocks() {
         e.from_address != self_addr_ &&
         e.latest_block_id > highest)
     {
-
+      std::cout << "[Sync] peer " << e.from_address
+                << " has the highest block id: " << e.latest_block_id << "\n";
       highest = e.latest_block_id;
       best    = e.from_address;
     }
@@ -135,6 +136,8 @@ void HeartbeatManager::fetchBlocksFromPeer(
                             ? gb_resp.error_message()
                             : status.error_message()) << "\n";
       return;
+    } else {
+      std::cout << "[Sync] got block " << id << "\n";
     }
 
     // commit into chain.json

@@ -73,6 +73,7 @@ void BlockScheduler::loop() {
     } else {
       std::cout << "[Scheduler] not leader, skipping\n";
     }
+    std::this_thread::sleep_for(milliseconds(2000));
   }
 }
 
@@ -150,7 +151,9 @@ void BlockScheduler::createAndBroadcastBlock(
 
   // 6) Send ProposeBlock to all peers
   bool all_yes = true;
-  for (auto& stub : stubs_) {
+  int i = 0;
+  for (auto &stub : stubs_)
+  {
     grpc::ClientContext ctx;
     // enforce a deadline on this RPC
     ctx.set_deadline(
@@ -164,7 +167,10 @@ void BlockScheduler::createAndBroadcastBlock(
       std::cerr << "[Scheduler] proposal rejected: "
                 << (status.ok() ? vote_resp.error_message() : status.error_message())
                 << "\n";
+
       break;
+    } else {
+      std::cout << "[Scheduler] proposal accepted by " << i << "\n";
     }
   }
   if (!all_yes) return;
